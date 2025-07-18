@@ -8,6 +8,8 @@ import (
 const (
 	colors   = 6
 	halfLife = 0.04
+	gridX    = 16
+	gridY    = 9
 )
 
 type Atom struct {
@@ -16,7 +18,9 @@ type Atom struct {
 
 type Particles struct {
 	atoms   [colors][]Atom
+	grid    [colors][gridY][gridX][]int
 	attract [colors][colors]float64
+	n       int32
 }
 
 func (p *Particles) Init() error {
@@ -27,10 +31,10 @@ func (p *Particles) Init() error {
 	}
 	for g := range p.atoms {
 		zero := V2{}
-		n := GetRandomValue(100, 200)
-		for range n {
-			x := float64(GetRandomValue(0, int32(WindowSize.X)))
-			y := float64(GetRandomValue(0, int32(WindowSize.Y)))
+		p.n = GetRandomValue(300, 400)
+		for range p.n {
+			x := float64(GetRandomValue(0, int32(WindowSize.X-1)))
+			y := float64(GetRandomValue(0, int32(WindowSize.Y-1)))
 			position := V2{x, y}
 			p.atoms[g] = append(p.atoms[g], Atom{position, zero, zero})
 		}
@@ -44,21 +48,28 @@ func (p *Particles) rule(i, j int, g float64) {
 	rmax := float64(120)
 	for a := range atoms1 {
 		force := V2{}
-		for b := range atoms2 {
-			if i == j && a == b {
-				continue
+		x, y := container(atoms1[a].position)
+		for dx := range 3 {
+			for dy := range 3 {
+				x2 := (gridX + x + dx - 1) % gridX
+				y2 := (gridY + y + dy - 1) % gridY
+				for _, b := range p.grid[j][y2][x2] {
+					if i == j && a == b {
+						continue
+					}
+					var ab V2
+					ab.X = toroidalDelta(atoms1[a].position.X, atoms2[b].position.X, WindowSize.X)
+					ab.Y = toroidalDelta(atoms1[a].position.Y, atoms2[b].position.Y, WindowSize.Y)
+					ab_len := V2Length(ab)
+					if ab_len > rmax {
+						continue
+					}
+					new := V2Scale(ab, compute_force(ab_len/rmax, g)/ab_len)
+					force = V2Add(force, new)
+				}
 			}
-			var ab V2
-			ab.X = toroidalDelta(atoms1[a].position.X, atoms2[b].position.X, WindowSize.X)
-			ab.Y = toroidalDelta(atoms1[a].position.Y, atoms2[b].position.Y, WindowSize.Y)
-			ab_len := V2Length(ab)
-			if ab_len > rmax {
-				continue
-			}
-			new := V2Scale(ab, compute_force(ab_len/rmax, g)/ab_len)
-			force = V2Add(force, new)
 		}
-		scale := rmax * 8
+		scale := rmax * 4
 		atoms1[a].force = V2Add(atoms1[a].force, V2Scale(force, scale))
 	}
 }
@@ -85,12 +96,32 @@ func (p *Particles) Update() {
 	if !isTabFocused() {
 		return
 	}
+	for c := range colors {
+		for y := range gridY {
+			for x := range gridX {
+				p.grid[c][y][x] = []int{}
+			}
+		}
+	}
+	for c := range colors {
+		for i := range p.atoms[c] {
+			pos := p.atoms[c][i].position
+			x, y := container(pos)
+			p.grid[c][y][x] = append(p.grid[c][y][x], i)
+		}
+	}
 	n := 8
 	dt := float64(GetFrameTime()) / float64(n)
 	friction := math.Pow(0.5, float64(dt)/halfLife)
 	for range n {
 		p.UpdatePart(dt, friction)
 	}
+}
+
+func container(p V2) (int, int) {
+	x := int(p.X * float64(gridX) / WindowSize.X)
+	y := int(p.Y * float64(gridY) / WindowSize.Y)
+	return x, y
 }
 
 func (p *Particles) UpdatePart(dt, friction float64) {
@@ -122,7 +153,7 @@ func (p Particles) Draw() {
 			atom := &p.atoms[c][i]
 			atom.position.X = modulo(atom.position.X, WindowSize.X)
 			atom.position.Y = modulo(atom.position.Y, WindowSize.Y)
-			DrawCircle(int32(atom.position.X), int32(atom.position.Y), 3, colors[c])
+			DrawCircle(int32(atom.position.X), int32(atom.position.Y), 1, colors[c])
 		}
 	}
 }
