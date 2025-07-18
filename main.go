@@ -6,7 +6,7 @@ import (
 )
 
 var (
-	WindowSize Vector2
+	WindowSize V2
 	update     = func() {
 		if !isTabFocused() {
 			return
@@ -25,7 +25,7 @@ var (
 func UpdateWindowSize() {
 	vw, vh := viewportSize()
 	SetWindowSize(vw, vh)
-	WindowSize = NewVector2(float32(vw), float32(vh))
+	WindowSize = V2{float64(vw), float64(vh)}
 }
 
 func main() {
@@ -34,7 +34,7 @@ func main() {
 	UpdateWindowSize()
 	plugins["particles"] = &Particles{}
 	PluginsInit()
-	SetTargetFPS(60)
+	SetTargetFPS(600)
 	SetMainLoop(update)
 	for !WindowShouldClose() {
 		update()

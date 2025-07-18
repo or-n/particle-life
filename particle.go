@@ -5,27 +5,34 @@ import (
 	"math"
 )
 
+const (
+	colors   = 6
+	halfLife = 0.04
+)
+
 type Atom struct {
-	x, y, vx, vy float64
+	position, velocity, force V2
 }
 
 type Particles struct {
-	atoms   [4][]Atom
-	attract [4][4]float32
+	atoms   [colors][]Atom
+	attract [colors][colors]float64
 }
 
 func (p *Particles) Init() error {
-	p.attract = [4][4]float32{
-		{0, 0, 0, 0},
-		{0, 0, 0, 0},
-		{0, 0, 0, 0},
-		{0, 0, 0, -0.1},
+	for i := range colors {
+		for j := range colors {
+			p.attract[i][j] = float64(GetRandomValue(-100, 100)) / 100
+		}
 	}
 	for g := range p.atoms {
-		for range 200 {
+		zero := V2{}
+		n := GetRandomValue(100, 200)
+		for range n {
 			x := float64(GetRandomValue(0, int32(WindowSize.X)))
 			y := float64(GetRandomValue(0, int32(WindowSize.Y)))
-			p.atoms[g] = append(p.atoms[g], Atom{x, y, 0, 0})
+			position := V2{x, y}
+			p.atoms[g] = append(p.atoms[g], Atom{position, zero, zero})
 		}
 	}
 	return nil
@@ -34,84 +41,108 @@ func (p *Particles) Init() error {
 func (p *Particles) rule(i, j int, g float64) {
 	atoms1 := p.atoms[i]
 	atoms2 := p.atoms[j]
-	g *= 100
+	rmax := float64(120)
 	for a := range atoms1 {
-		fx := float64(0)
-		fy := float64(0)
+		force := V2{}
 		for b := range atoms2 {
 			if i == j && a == b {
 				continue
 			}
-			dx := atoms1[a].x - atoms2[b].x
-			dy := atoms1[a].y - atoms2[b].y
-			dist := math.Sqrt(dx*dx + dy*dy)
-			if dist < 10 || dist > 80 {
+			var ab V2
+			ab.X = toroidalDelta(atoms1[a].position.X, atoms2[b].position.X, WindowSize.X)
+			ab.Y = toroidalDelta(atoms1[a].position.Y, atoms2[b].position.Y, WindowSize.Y)
+			ab_len := V2Length(ab)
+			if ab_len > rmax {
 				continue
 			}
-			F := g / dist
-			fx += dx * F
-			fy += dy * F
+			new := V2Scale(ab, compute_force(ab_len/rmax, g)/ab_len)
+			force = V2Add(force, new)
 		}
-		atoms1[a].vx = (atoms1[a].vx + fx) * 0.5
-		atoms1[a].vy = (atoms1[a].vy + fy) * 0.5
-		atoms1[a].x += atoms1[a].vx
-		atoms1[a].y += atoms1[a].vy
-		strength := float64(2)
-		r := float64(10)
-		if atoms1[a].x < r {
-			// atoms1[a].vx *= -1
-			atoms1[a].vx += (r - atoms1[a].x) * strength
-			atoms1[a].x = r
-		}
-		if atoms1[a].x > float64(WindowSize.X)-r {
-			// atoms1[a].vx *= -1
-			atoms1[a].vx += (float64(WindowSize.X) - r - atoms1[a].x) * strength
-			atoms1[a].x = float64(WindowSize.X) - r
-		}
-		if atoms1[a].y < r {
-			// atoms1[a].vy *= -1
-			atoms1[a].vy += (r - atoms1[a].y) * strength
-			atoms1[a].y = r
-		}
-		if atoms1[a].y > float64(WindowSize.Y)-r {
-			// atoms1[a].vy *= -1
-			atoms1[a].vy += (float64(WindowSize.Y) - r - atoms1[a].y) * strength
-			atoms1[a].y = float64(WindowSize.Y) - r
-		}
+		scale := rmax * 8
+		atoms1[a].force = V2Add(atoms1[a].force, V2Scale(force, scale))
 	}
+}
+
+func mix(a, b, t float64) float64 {
+	return a + (b-a)*t
+}
+
+func compute_force(d, g float64) float64 {
+	rmin := float64(0.3)
+	mid := (rmin + 1) / 2
+	var scale float64
+	if d < rmin {
+		scale = mix(-1, 0, d/rmin)
+	} else if d < mid {
+		scale = mix(0, g, (d-rmin)/(mid-rmin))
+	} else {
+		scale = mix(g, 0, (d-mid)/(1-mid))
+	}
+	return scale
 }
 
 func (p *Particles) Update() {
-	const (
-		red    = 0
-		green  = 1
-		blue   = 2
-		yellow = 3
-	)
-	p.rule(yellow, yellow, -0.1)
-	// p.rule(yellow, yellow, 0.01)
-	p.rule(blue, yellow, -0.0124)
-	p.rule(blue, blue, -0.1)
-	p.rule(yellow, blue, 0.004)
-	// p.rule(green, blue, 0.002)
-	p.rule(yellow, green, -0.097)
-	p.rule(green, yellow, -0.097)
-	p.rule(green, yellow, 0.0095)
-	p.rule(red, red, 0.0095)
-	p.rule(red, yellow, -0.0095)
-	p.rule(red, green, 0.002)
-	p.rule(green, blue, -0.04)
-	p.rule(green, green, 0.1)
+	if !isTabFocused() {
+		return
+	}
+	n := 8
+	dt := float64(GetFrameTime()) / float64(n)
+	friction := math.Pow(0.5, float64(dt)/halfLife)
+	for range n {
+		p.UpdatePart(dt, friction)
+	}
+}
+
+func (p *Particles) UpdatePart(dt, friction float64) {
+	for c := range colors {
+		for i := range p.atoms[c] {
+			p.atoms[c][i].force = V2{}
+		}
+	}
+	for i := range colors {
+		for j := range colors {
+			p.rule(i, j, p.attract[i][j])
+		}
+	}
+	for c := range colors {
+		for i := range p.atoms[c] {
+			atom := &p.atoms[c][i]
+			v := V2Scale(atom.velocity, friction)
+			atom.velocity = V2Lerp(v, atom.force, dt)
+			change := V2Scale(atom.velocity, dt)
+			atom.position = V2Add(atom.position, change)
+		}
+	}
 }
 
 func (p Particles) Draw() {
-	colors := [4]Color{Red, Green, Blue, Yellow}
-	for g, group := range p.atoms {
-		for _, atom := range group {
-			// screen := Vector2Scale(pos, WindowSize.Y/2)
-			// screen.X += WindowSize.X / 2
-			// screen.Y += WindowSize.Y / 2
-			DrawCircle(int32(atom.x), int32(atom.y), 3, colors[g])
+	colors := [colors]Color{Red, Green, Blue, Yellow, Orange, Purple}
+	for c := range colors {
+		for i := range p.atoms[c] {
+			atom := &p.atoms[c][i]
+			atom.position.X = modulo(atom.position.X, WindowSize.X)
+			atom.position.Y = modulo(atom.position.Y, WindowSize.Y)
+			DrawCircle(int32(atom.position.X), int32(atom.position.Y), 3, colors[c])
 		}
 	}
+}
+
+func toroidalDelta(a, b, size float64) float64 {
+	d := b - a
+	if d > size/2 {
+		d -= size
+	} else if d < -size/2 {
+		d += size
+	}
+	return d
+}
+
+func modulo(a, size float64) float64 {
+	for a < 0 {
+		a += size
+	}
+	for a > size {
+		a -= size
+	}
+	return a
 }
