@@ -7,7 +7,7 @@ import (
 
 const (
 	colors   = 6
-	halfLife = 0.04
+	halfLife = 0.16
 	gridX    = 16
 	gridY    = 9
 )
@@ -69,7 +69,7 @@ func (p *Particles) rule(i, j int, g float64) {
 				}
 			}
 		}
-		scale := rmax * 4
+		scale := rmax
 		atoms1[a].force = V2Add(atoms1[a].force, V2Scale(force, scale))
 	}
 }
