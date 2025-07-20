@@ -6,10 +6,11 @@ import (
 )
 
 const (
-	colors   = 6
-	halfLife = 0.16
-	gridX    = 16
-	gridY    = 9
+	colors    = 6
+	halfLife  = 0.16
+	gridX     = 16
+	gridY     = 9
+	subframes = 8
 )
 
 type Atom struct {
@@ -93,9 +94,6 @@ func compute_force(d, g float64) float64 {
 }
 
 func (p *Particles) Update() {
-	if !isTabFocused() {
-		return
-	}
 	for c := range colors {
 		for y := range gridY {
 			for x := range gridX {
@@ -110,10 +108,9 @@ func (p *Particles) Update() {
 			p.grid[c][y][x] = append(p.grid[c][y][x], i)
 		}
 	}
-	n := 8
-	dt := float64(GetFrameTime()) / float64(n)
+	dt := float64(GetFrameTime()) / float64(subframes)
 	friction := math.Pow(0.5, float64(dt)/halfLife)
-	for range n {
+	for range subframes {
 		p.UpdatePart(dt, friction)
 	}
 }
@@ -151,8 +148,8 @@ func (p Particles) Draw() {
 	for c := range colors {
 		for i := range p.atoms[c] {
 			atom := &p.atoms[c][i]
-			atom.position.X = modulo(atom.position.X, WindowSize.X)
-			atom.position.Y = modulo(atom.position.Y, WindowSize.Y)
+			atom.position.X = math.Mod(atom.position.X, WindowSize.X)
+			atom.position.Y = math.Mod(atom.position.Y, WindowSize.Y)
 			DrawCircle(int32(atom.position.X), int32(atom.position.Y), 1, colors[c])
 		}
 	}
@@ -166,14 +163,4 @@ func toroidalDelta(a, b, size float64) float64 {
 		d += size
 	}
 	return d
-}
-
-func modulo(a, size float64) float64 {
-	for a < 0 {
-		a += size
-	}
-	for a > size {
-		a -= size
-	}
-	return a
 }
