@@ -105,8 +105,10 @@ func (p *Particles) Update() {
 	}
 	for c := range colors {
 		for i := range p.atoms[c] {
-			pos := p.atoms[c][i].position
-			x, y := container(pos)
+			atom := &p.atoms[c][i]
+			atom.position.X = mod(atom.position.X, WindowSize.X)
+			atom.position.Y = mod(atom.position.Y, WindowSize.Y)
+			x, y := container(atom.position)
 			p.grid[c][y][x] = append(p.grid[c][y][x], i)
 		}
 	}
@@ -141,18 +143,22 @@ func (p *Particles) UpdatePart(dt, friction float64) {
 			atom.velocity = V2Lerp(v, atom.force, dt)
 			change := V2Scale(atom.velocity, dt)
 			atom.position = V2Add(atom.position, change)
+			atom.position.X = mod(atom.position.X, WindowSize.X)
+			atom.position.Y = mod(atom.position.Y, WindowSize.Y)
 		}
 	}
+}
+
+func mod(a, n float64) float64 {
+	return math.Mod(math.Mod(a, n)+n, n)
 }
 
 func (p Particles) Draw() {
 	colors := [colors]Color{Red, Green, Blue, Yellow, Orange, Purple}
 	for c := range colors {
 		for i := range p.atoms[c] {
-			atom := &p.atoms[c][i]
-			atom.position.X = math.Mod(atom.position.X, WindowSize.X)
-			atom.position.Y = math.Mod(atom.position.Y, WindowSize.Y)
-			DrawCircle(int32(atom.position.X), int32(atom.position.Y), 1, colors[c])
+			p := p.atoms[c][i].position
+			DrawCircle(int32(p.X), int32(p.Y), 1, colors[c])
 		}
 	}
 }
