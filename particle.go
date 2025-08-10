@@ -65,8 +65,10 @@ func (p *Particles) rule(i, j int, g float64) {
 					if ab_len > rmax {
 						continue
 					}
-					new := V2Scale(ab, compute_force(ab_len/rmax, g)/ab_len)
-					force = V2Add(force, new)
+					if ab_len > 1e-9 {
+						new := V2Scale(ab, compute_force(ab_len/rmax, g)/ab_len)
+						force = V2Add(force, new)
+					}
 				}
 			}
 		}
